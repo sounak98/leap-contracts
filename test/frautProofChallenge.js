@@ -43,19 +43,20 @@ contract('Parsec', (accounts) => {
       // initialize contract
       parsec = await deployBridge(token, 3);
       p[0] = await parsec.tipHash();
-      let data = await parsec.contract.bet.getData(0, 100, alice, alice, alice);
-      await token.approveAndCall(parsec.address, 1000, data, {from: alice});
+      token.transfer(bob, 1000);
+      let data = await parsec.contract.bet.getData(1, 100, bob, bob, bob);
+      await token.approveAndCall(parsec.address, 1000, data, {from: bob});
       token.transfer(charlie, 1000);
-      data = await parsec.contract.bet.getData(1, 100, charlie, charlie, charlie);
+      data = await parsec.contract.bet.getData(2, 100, charlie, charlie, charlie);
       await token.approveAndCall(parsec.address, 1000, data, {from: charlie});
-      await parsec.bet(2, 100, charlie, charlie, charlie, {from: charlie}).should.be.fulfilled;
     });
 
     it('should allow to build chain', async () => {
+      console.log('Block 0: ', p[0]);
+
       // create a deposit
       const value = 99000000;
       const deposit = Tx.deposit(1, value, alice);
-      console.log('D1: ', deposit.hex());
 
       // create some tx spending the deposit
       let spend1 = Tx.transfer(
@@ -63,17 +64,17 @@ contract('Parsec', (accounts) => {
         [new Output(value, bob)]
       );
       spend1 = spend1.sign([alicePriv]);
-      console.log('DS_PREV: ', spend1.hex());
 
       // submit that tx
       let block = new Block(32);
       block.addTx(deposit);
       block.addTx(spend1);
-      let period = new Period(p[0], [block]);
-      p[1] = period.merkleRoot();
-      await parsec.submitPeriod(1, p[0], p[1], ALL_SIGS, {from: charlie}).should.be.fulfilled;
-      const prevProof = period.proof(spend1);
-      console.log('prevProof: ', prevProof);
+      p[1] = block.merkleRoot();
+      console.log('Block 1: ', p[1]);
+      console.log('D1: ', deposit.hex());
+      console.log('DS_PREV: ', spend1.hex());
+      await parsec.submitPeriod(1, p[0], p[1], ALL_SIGS, {from: bob}).should.be.fulfilled;
+      const prevProof = block.proof(spend1);
 
       // create some tx spending the same deposit
       let spend2 = Tx.transfer(
@@ -81,15 +82,15 @@ contract('Parsec', (accounts) => {
         [new Output(value, charlie)]
       );
       spend2 = spend2.sign([alicePriv]);
-      console.log('DS: ', spend2.hex());
 
       // submit tx spending same output in later block
       block = new Block(64).addTx(spend2);
-      period = new Period(p[1], [block]);
-      p[2] = period.merkleRoot();
+      p[2] = block.merkleRoot();
+      console.log('');
+      console.log('Block 2: ', p[2]);
+      console.log('DS: ', spend2.hex());
       await parsec.submitPeriod(2, p[1], p[2], ALL_SIGS, {from: charlie}).should.be.fulfilled;
-      const proof = period.proof(spend2);
-      console.log('proof: ', proof);
+      const proof = block.proof(spend2);
 
       // create some spend from tx1
       let spend3 = Tx.transfer(
@@ -97,23 +98,19 @@ contract('Parsec', (accounts) => {
         [new Output(value, bob)]
       );
       spend3 = spend3.sign([bobPriv]);
-      console.log('exit: ', spend3.hex());
 
       // submit that tx
       block = new Block(64);
       block.addTx(spend3);
-      period = new Period(p[1], [block]);
-      p[3] = period.merkleRoot();
-      await parsec.submitPeriod(1, p[1], p[3], ALL_SIGS, {from: charlie}).should.be.fulfilled;
-      const exitProof = period.proof(spend3);
+      p[3] = block.merkleRoot();
+      console.log('');
+      console.log('Block 3: ', p[3]);
+      console.log('exit: ', spend3.hex());
+      await parsec.submitPeriod(1, p[1], p[3], ALL_SIGS, {from: bob}).should.be.fulfilled;
+      const exitProof = block.proof(spend3);
 
       // start exit
-      const event = await parsec.startExit(exitProof, 0);
-      const outpoint = new Outpoint(
-        event.logs[0].args.txHash,
-        event.logs[0].args.outIndex.toNumber()
-      );
-      //assert.equal(outpoint.getUtxoId(), spend3.inputs[0].prevout.getUtxoId());
+      await parsec.startExit(exitProof, 0);
 
       // create some spend from exited tx
       let spend4 = Tx.transfer(
@@ -121,54 +118,115 @@ contract('Parsec', (accounts) => {
         [new Output(value, bob)]
       );
       spend4 = spend4.sign([bobPriv]);
-      console.log('exitSpend: ', spend4.hex());
 
       // submit that tx
       block = new Block(96);
       block.addTx(spend4);
-      period = new Period(p[3], [block]);
-      p[5] = period.merkleRoot();
-      await parsec.submitPeriod(1, p[3], p[5], ALL_SIGS, {from: charlie}).should.be.fulfilled;
-      const spendProof = period.proof(spend4);
+      p[5] = block.merkleRoot();
+      const vote2 = Tx.periodVote(p[5]);
+      vote2.sign(bobPriv);
+      console.log('');
+      console.log('Block 5: ', p[5]);
+      console.log('vote by slot 1: ', vote2.options.v, vote2.options.r, vote2.options.s);
+      console.log('exitSpend: ', spend4.hex());
+      await parsec.submitPeriod(2, p[3], p[5], ALL_SIGS, {from: charlie}).should.be.fulfilled;
+      const spendProof = block.proof(spend4);
 
       // create another deposit
-      const deposit2 = Tx.deposit(1, value, bob);
-      console.log('D2: ', deposit2.hex());
+      const deposit2 = Tx.deposit(2, value, bob);
 
       // submit that in paralel block
       block = new Block(96);
       block.addTx(deposit2);
-      period = new Period(p[3], [block]);
-      p[4] = period.merkleRoot();
-      await parsec.submitPeriod(1, p[3], p[4], ALL_SIGS, {from: charlie}).should.be.fulfilled;
+      p[4] = block.merkleRoot();
+      const vote1 = Tx.periodVote(p[4]);
+      vote1.sign(bobPriv);
+      console.log('');
+      console.log('Block 4: ', p[4]);
+      console.log('vote by slot 1: ', vote1.options.v, vote1.options.r, vote1.options.s);
+      console.log('D2: ', deposit2.hex());
+      await parsec.submitPeriod(1, p[3], p[4], ALL_SIGS, {from: bob}).should.be.fulfilled;
     });
 
     it('allow to slash double spend', async () => {
-      const deposit1 = Tx.fromRaw('0x0211000000010000000005e69ec00000f3beac30c498d9e26865f34fcaa57dbb935b0d74');
-      const deposit2 = Tx.fromRaw('0x0211000000010000000005e69ec00000e10f3d125e5f4c753a6456fc37123cf17c6900f2');
-      const dsPref = Tx.fromRaw('0x0311846e4f732fd1c80e0a6d608cb0c732cfbe5cbf0efe1397c3d9a44f24170fd2f500d5275e033eb32583b0bdb0e0ef8c8164c43066868ad01eafc4491a980c4d84506d308f7995d30a855d9e5bafc73ed6ca4a6bebcf54569d161a774e64354c0ac11b0000000005e69ec00000e10f3d125e5f4c753a6456fc37123cf17c6900f2');
-      const ds = Tx.fromRaw('0x0311846e4f732fd1c80e0a6d608cb0c732cfbe5cbf0efe1397c3d9a44f24170fd2f500e4fba28e17dbfbab505cc56472c919c80133d0b1125baf299af9d3239e9480a127c09002d9cfc39e4b16ba5cc81607200c54fd3a507a7a0e7cf97cb7a5e0159a1c0000000005e69ec0000082e8c6cf42c8d1ff9594b17a3f50e94a12cc860f');
-      const exit = Tx.fromRaw('0x0311efcb630956a7b3c52eb6cda0ee11be33936562bf60214cd67794dc812353a0a200505d7bb19f0ac44a6e4c3715755c74a467ae385750b950c7d870bc77a4aa24bd2d41ea9b733b5290d08eae142233f3e546c5010abe50b843074a961547567f101c0000000005e69ec00000e10f3d125e5f4c753a6456fc37123cf17c6900f2');
-      const exitSpend = Tx.fromRaw('0x0311f1afcb6eb68a85e2cedad832798a9d402557c85199a5cd8861948a1a279ebc0200e52762194a99e0afa59337fd512979b0e575b5025929a1149b38cd50f096883d25b874d0f7d69321085ea17f789fdb245583f217f84ca14eef5a2b4b8f0e145c1b0000000005e69ec00000e10f3d125e5f4c753a6456fc37123cf17c6900f2');
 
-      // reconstruct blocks and proofs
-      let block = new Block(32);
+      // reconstruct block 1
+      let block = new Block(1);
+      const deposit1 = Tx.fromRaw('0x0211000000010000000005e69ec00000f3beac30c498d9e26865f34fcaa57dbb935b0d74');
+      const dsPref = Tx.fromRaw('0x0311846e4f732fd1c80e0a6d608cb0c732cfbe5cbf0efe1397c3d9a44f24170fd2f500d5275e033eb32583b0bdb0e0ef8c8164c43066868ad01eafc4491a980c4d84506d308f7995d30a855d9e5bafc73ed6ca4a6bebcf54569d161a774e64354c0ac11b0000000005e69ec00000e10f3d125e5f4c753a6456fc37123cf17c6900f2');
       block.addTx(deposit1);
       block.addTx(dsPref);
-      let period = new Period(p[0], [block]);
-      const dsPrevProof = period.proof(dsPref);
+      // create proof for double spend tx
+      const dsPrevProof = block.proof(dsPref);
 
+      // reconstruct block 2
       block = new Block(64);
+      const ds = Tx.fromRaw('0x0311846e4f732fd1c80e0a6d608cb0c732cfbe5cbf0efe1397c3d9a44f24170fd2f500e4fba28e17dbfbab505cc56472c919c80133d0b1125baf299af9d3239e9480a127c09002d9cfc39e4b16ba5cc81607200c54fd3a507a7a0e7cf97cb7a5e0159a1c0000000005e69ec0000082e8c6cf42c8d1ff9594b17a3f50e94a12cc860f');
       block.addTx(ds);
-      period = new Period(p[1], [block]);
-      const dsProof = period.proof(ds);
+      // create proof for double spend tx
+      const dsProof = block.proof(ds);
 
-      // submit proof and get block deleted
+      // submit proofs and get block deleted
       const bal1 = (await parsec.getSlot(2))[2];
-      console.log('proofs: ', dsPrevProof, dsProof);
       await parsec.reportDoubleSpend(dsProof, dsPrevProof, {from: alice});
       const bal2 = (await parsec.getSlot(2))[2];
       assert(bal1.toNumber() > bal2.toNumber());
     });
+
+    it('allow to exit challenge', async () => {
+      // reconstruct block with exit tx
+      let block = new Block(2);
+      const exit = Tx.fromRaw('0x0311efcb630956a7b3c52eb6cda0ee11be33936562bf60214cd67794dc812353a0a200505d7bb19f0ac44a6e4c3715755c74a467ae385750b950c7d870bc77a4aa24bd2d41ea9b733b5290d08eae142233f3e546c5010abe50b843074a961547567f101c0000000005e69ec00000e10f3d125e5f4c753a6456fc37123cf17c6900f2');
+      block.addTx(exit);
+      // create proof for exit tx
+      const exitProof = block.proof(exit);
+
+      // reconstruct block with spend tx
+      block = new Block(3);
+      const exitSpend = Tx.fromRaw('0x0311f1afcb6eb68a85e2cedad832798a9d402557c85199a5cd8861948a1a279ebc0200e52762194a99e0afa59337fd512979b0e575b5025929a1149b38cd50f096883d25b874d0f7d69321085ea17f789fdb245583f217f84ca14eef5a2b4b8f0e145c1b0000000005e69ec00000e10f3d125e5f4c753a6456fc37123cf17c6900f2');
+      block.addTx(exitSpend);
+      // create proof for spend tx
+      const exitSpendProof = block.proof(exitSpend);
+
+      // submit exit challenge
+      await parsec.challengeExit(exitSpendProof, exitProof, 0, 0);
+      const bal1 = await token.balanceOf(bob);
+      await parsec.finalizeExits(0);
+      const bal2 = await token.balanceOf(bob);
+      assert.equal(bal1.toNumber(), bal2.toNumber());
+    });
+
+    it('allow to challenge CAS', async () => {
+      // get signature 1
+      const vote1 = Tx.periodVote(p[4]);
+      vote1.sign(bobPriv);
+
+      // get signature 2
+      const vote2 = Tx.periodVote(p[5]);
+      vote2.sign(bobPriv);
+
+      // submit to contract
+      await parsec.slashDoubleSig(1, p[4], vote1.options.v, vote1.options.r, vote1.options.s, p[5], vote2.options.v, vote2.options.r, vote2.options.s);
+    });
+
+    it('allow to mine new block', async () => {
+      // 1. get PSC from faucet
+        // TODO: check that faucet working
+      // 2. approve balance to contract
+      await token.approve(parsec.address, 1000, {from: alice}).should.be.fulfilled;
+      // 3. fund the slot
+      await parsec.bet(0, 100, alice, alice, alice, {from: alice}).should.be.fulfilled;
+
+      // create some tx
+      const value = 99000000;
+      const deposit3 = Tx.deposit(2, value, charlie);
+      // create some block
+      let block = new Block(4);
+      block.addTx(deposit3);
+      p[6] = block.merkleRoot();
+      // submit it
+      await parsec.submitPeriod(0, p[5], p[6], ALL_SIGS, {from: alice}).should.be.fulfilled;
+    });
+
   });
 });

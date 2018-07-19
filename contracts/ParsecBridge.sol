@@ -487,29 +487,23 @@ contract ParsecBridge {
     // validate proofs
     uint256 offset = 32 * (_proof.length + 2);
     uint64 txPos1;
-    (txPos1, , ) = TxLib.validateProof(offset, _prevProof);
+    bytes memory txData1;
+    (txPos1, , txData1) = TxLib.validateProof(offset, _prevProof);
 
     uint64 txPos2;
-    (txPos2, , ) = TxLib.validateProof(32, _proof);
+    bytes memory txData2;
+    (txPos2, , txData2) = TxLib.validateProof(32, _proof);
 
     // make sure transactions are different
     require(_proof[0] != _prevProof[0] || txPos1 != txPos2);
 
     // get iputs and validate
-    bytes32 prevHash1;
-    bytes32 prevHash2;
-    uint8 outPos1;
-    uint8 outPos2;
-    assembly {
-      //TODO: allow other than first inputId
-      prevHash1 := calldataload(add(134, 32))
-      outPos1 := calldataload(add(166, 32))
-      prevHash2 := calldataload(add(134, offset))
-      outPos2 := calldataload(add(166, offset))
-    }
+    TxLib.Outpoint memory outpoint1 = TxLib.parseTx(txData1).ins[0].outpoint;
+    TxLib.Outpoint memory outpoint2 = TxLib.parseTx(txData2).ins[0].outpoint;
 
     // check that spending same outputs
-    require(prevHash1 == prevHash2 && outPos1 == outPos2);
+    require(outpoint1.hash == outpoint2.hash);
+    require(outpoint1.pos == outpoint2.pos);
     // delete invalid period
     deletePeriod(_proof[0]);
     // EVENT
