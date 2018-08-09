@@ -24,7 +24,7 @@ contract ERC721Receiver {
  * @title ERC721 Non-Fungible Token Standard basic implementation
  * @dev see https://github.com/ethereum/EIPs/blob/master/EIPS/eip-721.md
  */
-contract ERC721Basic {
+contract ERC721Storage {
 
   using SafeMath for uint256;
   using AddressUtils for address;
@@ -60,9 +60,6 @@ contract ERC721Basic {
     address indexed _operator,
     bool _approved
   );
-
-  constructor() public {
-  }
 
   /**
    * @dev Gets the balance of the specified address
@@ -108,17 +105,26 @@ contract ERC721Basic {
     return _leaf;
   }
 
+  function getState(uint256 _tokenId) returns (bytes32) {
+    return storageRoot[_tokenId];
+  }
+
+  function setState(uint256 _tokenId, bytes32 _newState) {
+    require(tx.origin == tokenOwner[_tokenId]);
+    storageRoot[_tokenId] = _newState;
+  }
+
   function getStorage(uint256 _tokenId, bytes32[] _proof, bytes32 _elem, uint256 _pos) public view returns (bytes32) {
     bytes32 root = getMerkleRoot(_elem, _pos, _proof);
     require(root == storageRoot[_tokenId]);
-    return root;
+    return _elem;
   }
 
   function setStorage(uint256 _tokenId, bytes32[] _proof, uint256 _pos, bytes32 _oldElem, bytes32 _newElem) public returns (bytes32) {
     require(getMerkleRoot(_oldElem, _pos, _proof) == storageRoot[_tokenId]);
     bytes32 newRoot = getMerkleRoot(_newElem, _pos, _proof);
     storageRoot[_tokenId] = newRoot;
-    return newRoot;
+    return _newElem;
   }  
 
   /**
