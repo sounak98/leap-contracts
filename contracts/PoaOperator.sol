@@ -188,7 +188,7 @@ contract PoaOperator is Adminable {
       hashRoot := keccak256(0, 0x40)
     }
 
-    uint256 newHeight = bridge.submitPeriod(_prevHash, hashRoot);
+    uint256 newHeight = bridge.submitProofPeriod(_prevHash, _blocksRoot, hashRoot);
     // check if epoch completed
     if (newHeight >= lastEpochBlockHeight + epochLength) {
       lastCompleteEpoch++;

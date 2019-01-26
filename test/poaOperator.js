@@ -69,8 +69,8 @@ contract('PoaOperator', (accounts) => {
         const proof = period.proof(depositTx);
 
         await operator.submitPeriod(1, p[1], period.merkleRoot(), { from: bob }).should.be.fulfilled;
-        p[2] = await bridge.tipHash();
-        assert.equal(p[2], proof[0]);
+        const rsp = await bridge.getPeriodHeight(proof[0]);
+        assert.equal(rsp[0].toNumber(), 3);
       });
     });
   });

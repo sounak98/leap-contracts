@@ -15,8 +15,7 @@ import "./TxLib.sol";
 contract FastExitHandler is ExitHandler {
 
   struct Data {
-    bytes32 parent;
-    uint32 timestamp;
+    uint256 timestamp;
     bytes32 txHash;
     uint64 txPos;
     bytes32 utxoId;
@@ -29,11 +28,11 @@ contract FastExitHandler is ExitHandler {
     require(msg.value >= exitStake, "Not enough ether sent to pay for exit stake");
     Data memory data;
 
-    (data.parent,,,) = bridge.periods(_proof[0]);
-    require(data.parent > 0, "The referenced period was not submitted to bridge");
+    (,data.timestamp) = bridge.getPeriodHeight(_proof[0]);
+    require(data.timestamp > 0, "The referenced period was not submitted to bridge");
 
-    (data.parent,,, data.timestamp) = bridge.periods(_youngestInputProof[0]);
-    require(data.parent > 0, "The referenced period was not submitted to bridge");
+    (, data.timestamp) = bridge.getPeriodHeight(_youngestInputProof[0]);
+    require(data.timestamp > 0, "The referenced period was not submitted to bridge");
 
     // check exiting tx inclusion in the root chain block
     bytes memory txData;
@@ -78,7 +77,7 @@ contract FastExitHandler is ExitHandler {
       priority = (nftExitCounter << 128) | uint128(uint256(data.utxoId));
       nftExitCounter++;
     } else {      
-      priority = getERC20ExitPriority(data.timestamp, data.utxoId, data.txPos);
+      priority = getERC20ExitPriority(uint32(data.timestamp), data.utxoId, data.txPos);
     }
 
     tokens[out.color].addr.transferFrom(msg.sender, signer, buyPrice);
@@ -91,7 +90,7 @@ contract FastExitHandler is ExitHandler {
       amount: out.value,
       finalized: false,
       stake: exitStake,
-      priorityTimestamp: data.timestamp
+      priorityTimestamp: uint32(data.timestamp)
     });
     emit ExitStarted(
       data.txHash, 

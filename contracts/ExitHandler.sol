@@ -81,9 +81,9 @@ contract ExitHandler is DepositHandler {
    */
   function startVerification(bytes32[] memory _proof, uint8 _outputIndex) public payable {
     require(msg.value >= exitStake, "Not enough ether sent to pay for verification stake");
-    bytes32 parent;
-    (parent,,,) = bridge.periods(_proof[0]);
-    require(parent > 0, "The referenced period was not submitted to bridge");
+    uint256 timestamp;
+    (,timestamp) = bridge.getPeriodHeight(_proof[0]);
+    require(timestamp > 0, "The referenced period was not submitted to bridge");
 
     // check exiting tx inclusion in the root chain block
     bytes32 utxoId;
@@ -131,11 +131,11 @@ contract ExitHandler is DepositHandler {
     bytes32[] memory _doublespendProof, bytes32[] memory _consolidateProof,
     uint8 _inputIndex, uint8 _consolidateInputIndex) public {
     // output owner of consolidate proof different then owner of some input
-    bytes32 parent;
-    (parent,,,) = bridge.periods(_doublespendProof[0]);
-    require(parent > 0, "The period referenced in doublespendProof was not submitted to bridge");
-    (parent,,,) = bridge.periods(_consolidateProof[0]);
-    require(parent > 0, "The period referenced in consolidateProof was not submitted to bridge");
+    uint256 timestamp;
+    (,timestamp) = bridge.getPeriodHeight(_doublespendProof[0]);
+    require(timestamp > 0, "The period referenced in doublespendProof was not submitted to bridge");
+    (,timestamp) = bridge.getPeriodHeight(_consolidateProof[0]);
+    require(timestamp > 0, "The period referenced in consolidateProof was not submitted to bridge");
 
     // check consolidate tx inclusion in the root chain block
     bytes32 txHash;
@@ -186,14 +186,13 @@ contract ExitHandler is DepositHandler {
     uint8 _outputIndex, uint8 _inputIndex
   ) public payable {
     require(msg.value >= exitStake, "Not enough ether sent to pay for exit stake");
-    bytes32 parent;
-    uint32 timestamp;
-    (parent,,, timestamp) = bridge.periods(_proof[0]);
-    require(parent > 0, "The referenced period was not submitted to bridge");
+    uint256 timestamp;
+    (, timestamp) = bridge.getPeriodHeight(_proof[0]);
+    require(timestamp > 0, "The referenced period was not submitted to bridge");
 
     if (_youngestInputProof.length > 0) {
-      (parent,,, timestamp) = bridge.periods(_youngestInputProof[0]);
-      require(parent > 0, "The referenced period was not submitted to bridge");
+      (, timestamp) = bridge.getPeriodHeight(_youngestInputProof[0]);
+      require(timestamp > 0, "The referenced period was not submitted to bridge");
     }
 
     // check exiting tx inclusion in the root chain block
@@ -226,7 +225,7 @@ contract ExitHandler is DepositHandler {
         priority = (nftExitCounter << 128) | uint128(uint256(utxoId));
         nftExitCounter++;
       } else {      
-        priority = getERC20ExitPriority(timestamp, utxoId, txPos);
+        priority = getERC20ExitPriority(uint32(timestamp), utxoId, txPos);
       }
     } else {
       require(exitingTx.txType == TxLib.TxType.Deposit, "Expected deposit tx");
@@ -234,7 +233,7 @@ contract ExitHandler is DepositHandler {
         priority = (nftExitCounter << 128) | uint128(uint256(utxoId));
         nftExitCounter++;
       } else {      
-        priority = getERC20ExitPriority(timestamp, utxoId, txPos);
+        priority = getERC20ExitPriority(uint32(timestamp), utxoId, txPos);
       }
     }
 
@@ -246,7 +245,7 @@ contract ExitHandler is DepositHandler {
       amount: out.value,
       finalized: false,
       stake: exitStake,
-      priorityTimestamp: timestamp
+      priorityTimestamp: uint32(timestamp)
     });
     emit ExitStarted(
       txHash, 
@@ -417,10 +416,9 @@ contract ExitHandler is DepositHandler {
     // check younger input is actually an input of exiting tx
     require(txHash == exitingTx.ins[_inputIndex].outpoint.hash, "Given output is not referenced in exiting tx");
     
-    bytes32 parent;
-    uint32 youngerInputTimestamp;
-    (parent,,,youngerInputTimestamp) = bridge.periods(_youngerInputProof[0]);
-    require(parent > 0, "The referenced period was not submitted to bridge");
+    uint256 youngerInputTimestamp;
+    (,youngerInputTimestamp) = bridge.getPeriodHeight(_youngerInputProof[0]);
+    require(youngerInputTimestamp > 0, "The referenced period was not submitted to bridge");
 
     require(exits[utxoId].priorityTimestamp < youngerInputTimestamp, "Challenged input should be older");
 

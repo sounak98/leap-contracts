@@ -18,6 +18,6 @@ export default async (txs, bridge, opts) => {
   period.setValidatorData(slotId, signerAddr);
   const newPeriodRoot = period.proof(txs[0])[0];
 
-  await bridge.submitPeriod(prevPeriodRoot, newPeriodRoot, opts).should.be.fulfilled;
+  await bridge.submitProofPeriod(prevPeriodRoot, period.merkleRoot(), newPeriodRoot, opts).should.be.fulfilled;
   return period;
 };

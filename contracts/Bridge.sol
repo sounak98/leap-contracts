@@ -39,6 +39,12 @@ contract Bridge is Adminable {
   address public operator; // the operator contract
 
   mapping(bytes32 => Period) public periods;
+  mapping(bytes32 => bytes32) periodsByProof;
+
+  function getPeriodHeight(bytes32 _periodRoot) public view returns (uint256, uint256) {
+    Period memory period = periods[periodsByProof[_periodRoot]];
+    return (period.height, period.timestamp);
+  }
 
   function initialize(uint256 _parentBlockInterval) public initializer {
     // init genesis preiod
@@ -99,5 +105,14 @@ contract Bridge is Adminable {
       children: new bytes32[](0)
     });
     periods[_root] = newPeriod;
+  }
+
+  function submitProofPeriod(
+    bytes32 _prevHash, 
+    bytes32 _merkleRoot,
+    bytes32 _periodRoot) 
+  public onlyOperator returns (uint256 newHeight) {
+    periodsByProof[_periodRoot] = _merkleRoot;
+    return submitPeriod(_prevHash, _merkleRoot);
   }
 }
